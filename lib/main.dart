@@ -1,7 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:http/http.dart' as http;
+
+var request = Uri.parse("https://api.hgbrasil.com/finance?key=45e22870");
 
 void main() {
   runApp(MaterialApp(home: Home()));
+}
+
+Future<Map> getData() async {
+  http.Response response = await http.get(request);
+  return jsonDecode(response.body)["results"]["currencies"];
 }
 
 class Home extends StatefulWidget {
@@ -12,136 +23,102 @@ class Home extends StatefulWidget {
 }
 
 class _HomeState extends State<Home> {
-  TextEditingController weightController = TextEditingController();
-  TextEditingController heightController = TextEditingController();
+  double dolar = 0;
+  double euro = 0;
 
-  GlobalKey<FormState> _formKey = GlobalKey<FormState>();
+  final TextEditingController realController = TextEditingController();
+  final TextEditingController dolarController = TextEditingController();
+  final TextEditingController euroController = TextEditingController();
 
-  String _infoText = "Informe seus dados!";
+  void _clearAll() {
+    realController.text = "";
+    dolarController.text = "";
+    euroController.text = "";
+  }
 
-  // Minimize the keyboard
-  void _hideKeyboard(BuildContext context) {
-    FocusScopeNode currentFocus = FocusScope.of(context);
-    if (!currentFocus.hasPrimaryFocus) {
-      currentFocus.unfocus();
+  void onChangeText(String currency, String text) {
+    if (text.isEmpty) {
+      _clearAll();
+      return;
     }
-  }
 
-  void _resetFields() {
-    weightController.text = "";
-    heightController.text = "";
-    setState(() {
-      _infoText = "Informe seus dados!";
-      _formKey = GlobalKey<FormState>();
-    });
-  }
+    double value = double.parse(text.replaceAll(',', '.'));
 
-  void _calculate() {
-    setState(() {
-      double weight = double.parse(weightController.text);
-      double height = double.parse(heightController.text) / 100;
-      double imc = weight / (height * height);
-
-      if (imc < 18.6) {
-        _infoText = "Abaixo do Peso (${imc.toStringAsPrecision(4)})";
-      } else if (imc >= 18.6 && imc < 24.9) {
-        _infoText = "Peso Ideal (${imc.toStringAsPrecision(4)})";
-      } else if (imc >= 24.9 && imc < 29.9) {
-        _infoText = "Levemente Acima do Peso (${imc.toStringAsPrecision(4)})";
-      } else if (imc >= 29.9 && imc < 34.9) {
-        _infoText = "Obesidade Grau I (${imc.toStringAsPrecision(4)})";
-      } else if (imc >= 34.9 && imc < 39.9) {
-        _infoText = "Obesidade Grau II (${imc.toStringAsPrecision(4)})";
-      } else if (imc >= 40) {
-        _infoText = "Obesidade Grau III (${imc.toStringAsPrecision(4)})";
-      }
-    });
+    switch (currency) {
+      case "Reais":
+        dolarController.text = (value / dolar).toStringAsFixed(2);
+        euroController.text = (value / euro).toStringAsFixed(2);
+        break;
+      case "Dolares":
+        realController.text = (value * this.dolar).toStringAsFixed(2);
+        euroController.text = (value * this.dolar / euro).toStringAsFixed(2);
+        break;
+      case "Euros":
+        realController.text = (value * this.euro).toStringAsFixed(2);
+        dolarController.text = (value * this.euro / dolar).toStringAsFixed(2);
+        break;
+      default:
+        break;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => _hideKeyboard(context),
-      child: Scaffold(
-        // resizeToAvoidBottomInset: false,
-        appBar: AppBar(
-          title: Text('Calculadora IMC'),
-          backgroundColor: Colors.green,
-          actions: [
-            IconButton(onPressed: _resetFields, icon: Icon(Icons.refresh))
-          ],
-        ),
-        body: SingleChildScrollView(
-          padding: EdgeInsets.fromLTRB(10, 0, 10, 0),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: <Widget>[
-                Icon(
-                  Icons.person_outline,
-                  size: 120,
-                  color: Colors.green,
-                ),
-                TextFormField(
-                  controller: weightController,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.next,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Ensira seu Peso!";
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Peso (kg)',
-                    labelStyle: TextStyle(color: Colors.green),
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Conversor de Moedas \$'),
+        backgroundColor: Colors.amber,
+      ),
+      body: FutureBuilder<Map>(
+        future: getData(),
+        builder: (context, snapshot) {
+          switch (snapshot.connectionState) {
+            case ConnectionState.none:
+            case ConnectionState.waiting:
+              return Center(child: Text('Carregando Dados..'));
+            default:
+              if (snapshot.hasError) {
+                return Center(child: Text('Erro ao Carregar os Dados :('));
+              } else {
+                dolar = snapshot.data?["USD"]["buy"];
+                euro = snapshot.data?["EUR"]["buy"];
+
+                return SingleChildScrollView(
+                  padding: EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Icon(Icons.monetization_on,
+                          size: 150, color: Colors.amber),
+                      buildTextField(
+                          "Reais", "R\$", realController, onChangeText),
+                      Divider(),
+                      buildTextField(
+                          "Dolares", "US\$", dolarController, onChangeText),
+                      Divider(),
+                      buildTextField(
+                          "Euros", "€", euroController, onChangeText),
+                    ],
                   ),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.green, fontSize: 18),
-                ),
-                TextFormField(
-                  controller: heightController,
-                  keyboardType: TextInputType.number,
-                  textInputAction: TextInputAction.done,
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return "Ensira sua altura!";
-                    }
-                  },
-                  decoration: InputDecoration(
-                    labelText: 'Altura (cm)',
-                    labelStyle: TextStyle(color: Colors.green),
-                  ),
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.green, fontSize: 18),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(top: 15, bottom: 15),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      if (_formKey.currentState!.validate()) {
-                        _calculate();
-                      }
-                    },
-                    child: Padding(
-                      padding: EdgeInsets.all(15.0),
-                      child: Text('Calcular'),
-                    ),
-                    style: ButtonStyle(
-                        backgroundColor:
-                            MaterialStateProperty.all(Colors.green)),
-                  ),
-                ),
-                Text(
-                  _infoText,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: Colors.green),
-                )
-              ],
-            ),
-          ),
-        ),
+                );
+              }
+          }
+        },
       ),
     );
   }
+}
+
+Widget buildTextField(String label, String prefix,
+    TextEditingController controller, Function onChanged) {
+  return TextField(
+    controller: controller,
+    onChanged: (value) => onChanged(label, value),
+    keyboardType: TextInputType.numberWithOptions(decimal: true),
+    decoration: InputDecoration(
+        labelText: label,
+        labelStyle: TextStyle(color: Colors.amber),
+        border: OutlineInputBorder(),
+        prefixText: prefix),
+  );
 }
